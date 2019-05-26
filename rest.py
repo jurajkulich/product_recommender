@@ -10,8 +10,8 @@ def index():
 
 @app.route('/<int:customer_id>')
 def show_recommendations(customer_id):
-    prediction = recommendations.get_recommendation(customer_id)
-    return str(prediction)
+    return str(recommendations.get_recommendation(customer_id)
+)
 
 if __name__ == '__main__':
     app.run(debug=True)
