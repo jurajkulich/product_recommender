@@ -3,12 +3,8 @@ import pandas as pd
 import numpy as np
 from scipy.sparse import csr_matrix
 from sklearn.neighbors import NearestNeighbors
-import matplotlib.pyplot as plt
 
 RECOMMENDATION_PATH = os.path.join("datasets", "recommendation")
-
-
-
 
 # Returns CSV data to Pandas DataFrame
 def load_recommendation_data(recommendation_path=RECOMMENDATION_PATH):
@@ -51,20 +47,21 @@ def prepare_data(query_id):
     dataset_with_interactions = customers_dataset.merge(total_interactions, left_on='product_id', right_on='product_id',
                                                         how='left')
 
-    cicina = (dataset_with_interactions[dataset_with_interactions['total_interactions'] > 450])
-
-    print(dataset_with_interactions.info())
+    z = np.array_split(dataset_with_interactions, 30)
+    wide_dataset_cat = z[0]
+    for i in range(1, 30):
+         wide_dataset_cat = wide_dataset_cat.append(z[i])
 
     # dataset with only category_id == 1
-    category_one_dataset = dataset_with_interactions.query('category_id == \'1\'')
+    # category_one_dataset = dataset_with_interactions.query('category_id == \'1\'')
 
-
-    wide_dataset_cat = dataset_with_interactions.pivot(index='product_id', columns='customer_id',
-                                                       values='customer_interactions').fillna(0)
+    # wide_dataset_cat = category_one_dataset.pivot(index='product_id', columns='customer_id',
+    #                                                    values='customer_interactions').fillna(0)
 
     wide_dataset_cat_sparse = csr_matrix(wide_dataset_cat.values)
 
-    user_id_index = dataset_with_interactions[dataset_with_interactions['customer_id']==query_id].index.values.astype(int)[0]
+    print(wide_dataset_cat[wide_dataset_cat['customer_id']==query_id].index.values.astype(int))
+    user_id_index = wide_dataset_cat[wide_dataset_cat['customer_id']==query_id].index.values.astype(int)[0]
     print(user_id_index)
     return wide_dataset_cat_sparse, wide_dataset_cat, user_id_index
 
@@ -72,13 +69,9 @@ def prepare_data(query_id):
 def get_recommendation(query_id):
 
     wide_dataset_cat_sparse, wide_dataset_cat, user_id_index = prepare_data(query_id)
-    print(wide_dataset_cat)
 
     model_kmm = NearestNeighbors(metric='cosine', algorithm='brute')
     model_kmm.fit(wide_dataset_cat_sparse)
-
-    # chooses random index from all users
-    query_index = np.random.choice(wide_dataset_cat.shape[0])
 
     distances, indices = model_kmm.kneighbors(wide_dataset_cat.iloc[user_id_index, :].values.reshape(1, -1), n_neighbors=6)
 
@@ -88,4 +81,5 @@ def get_recommendation(query_id):
         else:
             print('{0}: {1}, with distance of {2}:'.format(i, wide_dataset_cat.index[indices.flatten()[i]],
                                                            distances.flatten()[i]))
+
 get_recommendation(5)
