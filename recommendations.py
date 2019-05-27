@@ -1,12 +1,12 @@
 import os
 import pandas as pd
-import numpy as np
 from scipy.sparse import csr_matrix
 from sklearn.neighbors import NearestNeighbors
 import json
 
 # local path for datasets
 RECOMMENDATION_PATH = os.path.join("datasets", "recommendation")
+popularity_threshold = 1200
 
 # Loads CSV data to Pandas DataFrame
 def load_recommendation_data(recommendation_path=RECOMMENDATION_PATH):
@@ -47,35 +47,47 @@ def prepare_data(query_id):
     dataset_with_interactions = customers_dataset.merge(total_interactions, left_on='product_id', right_on='product_id',
                                                         how='left')
 
-    # I was getting MemoryError on pivot function - I have split dataset on 30 chunks
-    z = np.array_split(dataset_with_interactions, 30)
-    wide_dataset_cat = z[0]
-    for i in range(1, 30):
-         wide_dataset_cat = wide_dataset_cat.append(z[i])
+    popular_dataset = dataset_with_interactions.query('total_interactions >= @popularity_threshold')
+
+    popular_dataset = popular_dataset.append(dataset_with_interactions.loc[dataset_with_interactions['customer_id'] == query_id])
+
+    if not popular_dataset[popular_dataset.duplicated(['customer_id', 'product_id'])].empty:
+        initial_rows = popular_dataset.shape[0]
+
+        print('Initial dataframe shape {0}'.format(popular_dataset.shape))
+        popular_dataset = popular_dataset.drop_duplicates(['customer_id', 'product_id'])
+        current_rows = popular_dataset.shape[0]
+        print('New dataframe shape {0}'.format(popular_dataset.shape))
+        print('Removed {0} rows'.format(initial_rows - current_rows))
+
+
+    wide_dataset_cat = popular_dataset.pivot(index='product_id', columns='customer_id', values='customer_interactions').fillna(0)
 
     wide_dataset_cat_sparse = csr_matrix(wide_dataset_cat.values)
 
-    user_id_index = wide_dataset_cat[wide_dataset_cat['customer_id']==query_id].index.values.astype(int)[0]
+    user_id_index = 0
+    for index, val in enumerate(wide_dataset_cat):
+        if val == query_id:
+            user_id_index = index
     return wide_dataset_cat_sparse, wide_dataset_cat, user_id_index
 
 
-def get_recommendation(query_id):
+def get_recommendation(query_index):
 
-    wide_dataset_cat_sparse, wide_dataset_cat, user_id_index = prepare_data(query_id)
+    wide_dataset_cat_sparse, wide_dataset_cat, user_id_index = prepare_data(query_index)
 
-    model_kmm = NearestNeighbors(metric='cosine', algorithm='brute')
-    model_kmm.fit(wide_dataset_cat_sparse)
+    model_knn = NearestNeighbors(metric='cosine', algorithm='brute')
+    model_knn.fit(wide_dataset_cat_sparse)
 
-    distances, indices = model_kmm.kneighbors(wide_dataset_cat.iloc[user_id_index, :].values.reshape(1, -1), n_neighbors=6)
+    distances, indices = model_knn.kneighbors(wide_dataset_cat.iloc[user_id_index, :].values.reshape(1, -1), n_neighbors=6)
 
     list = []
     for i in range(1, len(distances.flatten())):
         list.append({"product_id": int(wide_dataset_cat.index[indices.flatten()[i]]), "distance": (distances.flatten()[i])})
 
     result_data = {
-        "customer_id": int(wide_dataset_cat.index[query_id]),
+        "customer_id": int(wide_dataset_cat.index[user_id_index]),
         "results": list
     }
-
+    print(result_data)
     return json.dumps(result_data)
-
