@@ -49,25 +49,23 @@ def prepare_data(query_id):
     dataset_with_interactions = customers_dataset.merge(total_interactions, left_on='product_id', right_on='product_id',
                                                         how='left')
 
+    # Picking up threshold for reducing noise in results
     popular_dataset = dataset_with_interactions.query('total_interactions >= @popularity_threshold')
 
+    # When was user deleted because of low rankings we add him to dataset
     popular_dataset = popular_dataset.append(
         dataset_with_interactions.loc[dataset_with_interactions['customer_id'] == query_id])
 
+    # Removes duplicates from dataset
     if not popular_dataset[popular_dataset.duplicated(['customer_id', 'product_id'])].empty:
-        initial_rows = popular_dataset.shape[0]
-
-        print('Initial dataframe shape {0}'.format(popular_dataset.shape))
         popular_dataset = popular_dataset.drop_duplicates(['customer_id', 'product_id'])
-        current_rows = popular_dataset.shape[0]
-        print('New dataframe shape {0}'.format(popular_dataset.shape))
-        print('Removed {0} rows'.format(initial_rows - current_rows))
 
     wide_dataset_cat = popular_dataset.pivot(index='product_id', columns='customer_id',
                                              values='customer_interactions').fillna(0)
 
     wide_dataset_cat_sparse = csr_matrix(wide_dataset_cat.values)
 
+    # Finds an index of customer in dataset
     user_id_index = 0
     for index, val in enumerate(wide_dataset_cat):
         if val == query_id:
@@ -84,6 +82,7 @@ def get_recommendation(query_index):
     distances, indices = model_knn.kneighbors(wide_dataset_cat.iloc[user_id_index, :].values.reshape(1, -1),
                                               n_neighbors=6)
 
+    # creating JSON from results
     list = []
     for i in range(1, len(distances.flatten())):
         list.append(
