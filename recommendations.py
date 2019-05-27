@@ -8,19 +8,21 @@ import json
 RECOMMENDATION_PATH = os.path.join("datasets", "recommendation")
 popularity_threshold = 1200
 
+
 # Loads CSV data to Pandas DataFrame
 def load_recommendation_data(recommendation_path=RECOMMENDATION_PATH):
     csv_path = os.path.join(recommendation_path, "dataset_catalog.csv")
     return pd.read_csv(csv_path)
+
 
 # Loads CSV data to Pandas DataFrame
 def load_recommendation_events_data(recommendation_path=RECOMMENDATION_PATH):
     csv_path = os.path.join(recommendation_path, "dataset_events.csv")
     return pd.read_csv(csv_path)
 
+
 # Function for preparing data from CSV
 def prepare_data(query_id):
-
     dataset_catalog = load_recommendation_data()
     dataset_events = load_recommendation_events_data()
 
@@ -49,7 +51,8 @@ def prepare_data(query_id):
 
     popular_dataset = dataset_with_interactions.query('total_interactions >= @popularity_threshold')
 
-    popular_dataset = popular_dataset.append(dataset_with_interactions.loc[dataset_with_interactions['customer_id'] == query_id])
+    popular_dataset = popular_dataset.append(
+        dataset_with_interactions.loc[dataset_with_interactions['customer_id'] == query_id])
 
     if not popular_dataset[popular_dataset.duplicated(['customer_id', 'product_id'])].empty:
         initial_rows = popular_dataset.shape[0]
@@ -60,8 +63,8 @@ def prepare_data(query_id):
         print('New dataframe shape {0}'.format(popular_dataset.shape))
         print('Removed {0} rows'.format(initial_rows - current_rows))
 
-
-    wide_dataset_cat = popular_dataset.pivot(index='product_id', columns='customer_id', values='customer_interactions').fillna(0)
+    wide_dataset_cat = popular_dataset.pivot(index='product_id', columns='customer_id',
+                                             values='customer_interactions').fillna(0)
 
     wide_dataset_cat_sparse = csr_matrix(wide_dataset_cat.values)
 
@@ -73,17 +76,18 @@ def prepare_data(query_id):
 
 
 def get_recommendation(query_index):
-
     wide_dataset_cat_sparse, wide_dataset_cat, user_id_index = prepare_data(query_index)
 
     model_knn = NearestNeighbors(metric='cosine', algorithm='brute')
     model_knn.fit(wide_dataset_cat_sparse)
 
-    distances, indices = model_knn.kneighbors(wide_dataset_cat.iloc[user_id_index, :].values.reshape(1, -1), n_neighbors=6)
+    distances, indices = model_knn.kneighbors(wide_dataset_cat.iloc[user_id_index, :].values.reshape(1, -1),
+                                              n_neighbors=6)
 
     list = []
     for i in range(1, len(distances.flatten())):
-        list.append({"product_id": int(wide_dataset_cat.index[indices.flatten()[i]]), "distance": (distances.flatten()[i])})
+        list.append(
+            {"product_id": int(wide_dataset_cat.index[indices.flatten()[i]]), "distance": (distances.flatten()[i])})
 
     result_data = {
         "customer_id": int(wide_dataset_cat.index[user_id_index]),
